@@ -1,14 +1,14 @@
 import json
 
-from naiades.downloads import get_downloads, list_subdirs_by_time
+from naiades.downloads import get_downloads
 
 
 def test_get_downloads():
     downloads = get_downloads()
-    print(json.dumps(downloads.to_dict(), indent=4))
+    print(json.dumps(downloads.to_dict(), indent=2))
 
 
 def test_list_subdirs_by_time():
-    dir = "/Volumes/My Passport/Anime"
-    subdirs = list_subdirs_by_time(dir)
-    print(subdirs)
+    downloads = get_downloads()
+    subdirs = downloads.downloads[0].list_subdirs_by_mtime()
+    print(json.dumps([subdir.to_dict() for subdir in subdirs], indent=2))
