@@ -8,6 +8,7 @@ import yaml
 from dataclasses_json import DataClassJsonMixin
 
 downloads_config_path = "configs/downloads.yaml"
+downloads_date_time_format = "%Y-%m-%d %H:%M:%S"
 
 
 @dataclass
@@ -74,7 +75,7 @@ class DownloadDir(DataClassJsonMixin):
         for result in results_sorted:
             # the time is off... have not figured out why
             if isinstance(result.date_time, datetime.datetime):
-                result.date_time = result.date_time.strftime("%Y-%m-%d %H:%M:%S")
+                result.date_time = result.date_time.strftime(downloads_date_time_format)
 
         return results_sorted
 

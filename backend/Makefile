@@ -11,7 +11,7 @@ check-types:
 	mypy --ignore-missing-imports --check-untyped-defs --install-types --non-interactive naiades tests
 
 test:
-	pytest -svv tests
+	pytest -svv --log-cli-level=INFO tests
 
 # remember to activate virtualenv
 run:
