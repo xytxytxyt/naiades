@@ -1,9 +1,12 @@
+import asyncio
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from naiades.downloads import DownloadSubdirDisplay
 from naiades.downloads import get_downloads as get_downloads_internal
+from naiades.rss import rss_downloader_loop
 
 app = FastAPI()
 
@@ -18,6 +21,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    # https://stackoverflow.com/questions/70854314/use-fastapi-to-interact-with-async-loop
+    asyncio.create_task(rss_downloader_loop())
 
 
 class DownloadSubdirDisplayAPI(BaseModel):

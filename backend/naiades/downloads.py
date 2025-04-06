@@ -95,3 +95,6 @@ def get_downloads() -> Downloads:
         with open(downloads_config_path) as f:
             downloads = Downloads.from_dict(yaml.safe_load(f.read()))
     return downloads
+
+
+downloads = get_downloads()

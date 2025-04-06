@@ -1,6 +1,9 @@
+import asyncio
 import datetime
 import logging
 import re
+import shutil
+import subprocess
 import sys
 
 import requests
@@ -15,6 +18,8 @@ logging.basicConfig(
 )
 
 rss_date_time_format = "%a, %d %b %Y %H:%M:%S %z"
+# rss_check_period_s = 600
+rss_check_period_s = 10
 
 
 class RSSDownloader(object):
@@ -32,6 +37,7 @@ class RSSDownloader(object):
         self.url = self.downloads.rss_url
         self.last_checked_time = self.approximate_last_checked_time()
         self.patterns_paths = self.get_patterns_paths()
+        self.logger.info(f"initializing; last check time was {self.last_checked_time}")
 
     def approximate_last_checked_time(self) -> datetime.datetime:
         mtimes: list[datetime.datetime] = []
@@ -59,6 +65,7 @@ class RSSDownloader(object):
         )
 
     def update_new_downloads_from_xml(self, xml: str, new_downloads: dict[str, str]):
+        self.logger.info(f"last check time was {self.last_checked_time}")
         xmld = xmltodict.parse(xml)
         for item in xmld["rss"]["channel"]["item"]:
             title = item["title"]
@@ -75,10 +82,11 @@ class RSSDownloader(object):
                         self.logger.info(
                             f"found match {title}, but skipping because its pub date {item['pubDate']} is too old"
                         )
+        now = datetime.datetime.today().astimezone()
+        self.last_checked_time = now
 
     def get_new_downloads(self) -> dict[str, str]:
         new_downloads: dict[str, str] = {}
-        now = datetime.datetime.today().astimezone()
         resp = requests.get(
             self.url,
             headers={
@@ -87,7 +95,6 @@ class RSSDownloader(object):
         )
         if resp.status_code == requests.codes.ok:
             self.logger.info(f"new updates from rss {self.url}")
-            self.last_checked_time = now
             self.update_new_downloads_from_xml(resp.text, new_downloads)
         elif resp.status_code == requests.codes.not_modified:
             self.logger.info(f"no updates from rss {self.url}")
@@ -97,9 +104,50 @@ class RSSDownloader(object):
             )
         return new_downloads
 
-    def check_and_possibly_download(self):
-        # new_downloads = self.get_new_downloads()
-        pass
+    async def download(self, downloads: dict[str, str]):
+        processes: dict[str, subprocess.Popen] = {}
+        for output_path in downloads:
+            link = downloads[output_path]
+            self.logger.info(f"downloading to {output_path}: {link}")
+            webtorrent_path = shutil.which("webtorrent")
+            assert webtorrent_path, "could not find webtorrent"
+            processes[output_path] = subprocess.Popen(
+                [
+                    webtorrent_path,
+                    "download",
+                    link,
+                    "--out",
+                    output_path,
+                    "--quiet",
+                ]
+            )
+        while True:
+            await asyncio.sleep(1)
+            returncodes: list[int | None] = []
+            for output_path in processes:
+                process = processes[output_path]
+                returncode = process.poll()
+                if returncode is None:
+                    self.logger.info(f"still waiting for download to {output_path}")
+                returncodes.append(returncode)
+            if all(returncode is not None for returncode in returncodes):
+                self.logger.info("all downloads done")
+                break
+        self.logger.info("results:")
+        for output_path in processes:
+            process = processes[output_path]
+            try:
+                stdout, stderr = process.communicate()
+                self.logger.info(stdout)
+                self.logger.error(stderr)
+            except Exception as e:
+                self.logger.error(e)
+
+    async def check_possibly_download(self):
+        new_downloads = self.get_new_downloads()
+        self.logger.info(f"checked and found {len(new_downloads)} new downloads")
+        if len(new_downloads) > 0:
+            await self.download(new_downloads)
 
 
 rss_downloader = None
@@ -110,3 +158,16 @@ def get_rss_downloader() -> RSSDownloader:
     if rss_downloader is None:
         rss_downloader = RSSDownloader(get_downloads())
     return rss_downloader
+
+
+async def rss_downloader_loop():
+    # https://stackoverflow.com/questions/37512182/how-can-i-periodically-execute-a-function-with-asyncio
+    while True:
+        assert rss_downloader is not None, "rss downloader failed to initialize"
+        await asyncio.gather(
+            rss_downloader.check_possibly_download(),
+            asyncio.sleep(rss_check_period_s),
+        )
+
+
+rss_downloader = get_rss_downloader()
