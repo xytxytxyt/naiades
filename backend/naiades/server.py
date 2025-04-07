@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,8 +12,10 @@ from naiades.rss import rss_downloader_loop
 app = FastAPI()
 
 origins = [
-    "http://localhost:5173",
+    f"http://{allowed_origin_host.strip()}:5174"
+    for allowed_origin_host in os.environ["ALLOWED_ORIGIN_HOSTS"].split(",")
 ]
+origins = list(set(origins) | set(["http://localhost:5174"]))
 
 app.add_middleware(
     CORSMiddleware,

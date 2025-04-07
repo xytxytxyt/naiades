@@ -1,3 +1,5 @@
+ALLOWED_ORIGIN_HOSTS ?= localhost
+
 lint-check:
 	isort --check-only --diff --profile black naiades tests
 	black --check --diff naiades tests
@@ -15,4 +17,4 @@ test:
 
 # remember to activate virtualenv
 run:
-	fastapi dev naiades/server.py --port 8001
+	fastapi dev naiades/server.py --host 0.0.0.0 --port 8001
