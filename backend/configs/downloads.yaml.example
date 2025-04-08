@@ -1,0 +1,7 @@
+rss_url: https://subdomain.domain/my/rss/feed
+downloads:
+  - path: /my/download/path
+    subdirs:
+      - name: My Favorite Show
+        pattern: .*My Favorite Show.*
+      - name: My Second-Favorite Show
