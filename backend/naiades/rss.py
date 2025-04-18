@@ -18,7 +18,7 @@ logging.basicConfig(
 )
 
 rss_date_time_format = "%a, %d %b %Y %H:%M:%S %z"
-rss_check_period_s = 600
+rss_check_period_s = 3600
 
 
 class RSSDownloader(object):
