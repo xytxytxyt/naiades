@@ -63,7 +63,9 @@ class RSSDownloader(object):
             rss_date_time_format
         )
 
-    def update_new_downloads_from_xml(self, xml: str, new_downloads: dict[str, str]):
+    def update_new_downloads_from_xml(
+        self, xml: str, new_downloads: dict[str, list[str]]
+    ):
         self.logger.info(f"last check time was {self.last_checked_time}")
         xmld = xmltodict.parse(xml)
         for item in xmld["rss"]["channel"]["item"]:
@@ -76,7 +78,9 @@ class RSSDownloader(object):
                         self.logger.info(
                             f"new download: {title}, {self.patterns_paths[pattern]}, {link}"
                         )
-                        new_downloads[self.patterns_paths[pattern]] = link
+                        if self.patterns_paths[pattern] not in new_downloads:
+                            new_downloads[self.patterns_paths[pattern]] = []
+                        new_downloads[self.patterns_paths[pattern]].append(link)
                     else:
                         self.logger.info(
                             f"found match {title}, but skipping because its pub date {item['pubDate']} is too old"
@@ -84,8 +88,8 @@ class RSSDownloader(object):
         now = datetime.datetime.today().astimezone()
         self.last_checked_time = now
 
-    def get_new_downloads(self) -> dict[str, str]:
-        new_downloads: dict[str, str] = {}
+    def get_new_downloads(self) -> dict[str, list[str]]:
+        new_downloads: dict[str, list[str]] = {}
         resp = requests.get(
             self.url,
             headers={
@@ -103,49 +107,54 @@ class RSSDownloader(object):
             )
         return new_downloads
 
-    async def download(self, downloads: dict[str, str]):
-        processes: dict[str, subprocess.Popen] = {}
+    async def download(self, downloads: dict[str, list[str]]):
+        processes: dict[str, list[subprocess.Popen]] = {}
         for output_path in downloads:
-            link = downloads[output_path]
-            self.logger.info(f"downloading to {output_path}: {link}")
-            webtorrent_path = shutil.which("webtorrent")
-            assert webtorrent_path, "could not find webtorrent"
-            processes[output_path] = subprocess.Popen(
-                [
-                    webtorrent_path,
-                    "download",
-                    link,
-                    "--out",
-                    output_path,
-                    "--quiet",
-                ]
-            )
+            for link in downloads[output_path]:
+                self.logger.info(f"downloading to {output_path}: {link}")
+                webtorrent_path = shutil.which("webtorrent")
+                assert webtorrent_path, "could not find webtorrent"
+                if output_path not in processes:
+                    processes[output_path] = []
+                processes[output_path].append(
+                    subprocess.Popen(
+                        [
+                            webtorrent_path,
+                            "download",
+                            link,
+                            "--out",
+                            output_path,
+                            "--quiet",
+                        ]
+                    )
+                )
         while True:
             await asyncio.sleep(1)
             returncodes: list[int | None] = []
             for output_path in processes:
-                process = processes[output_path]
-                returncode = process.poll()
-                if returncode is None:
-                    self.logger.info(f"still waiting for download to {output_path}")
-                returncodes.append(returncode)
+                for process in processes[output_path]:
+                    returncode = process.poll()
+                    if returncode is None:
+                        self.logger.info(f"still waiting for download to {output_path}")
+                    returncodes.append(returncode)
             if all(returncode is not None for returncode in returncodes):
                 self.logger.info("all downloads done")
                 break
         self.logger.info("results:")
         for output_path in processes:
-            process = processes[output_path]
-            try:
-                stdout, stderr = process.communicate()
-                self.logger.info(stdout)
-                self.logger.error(stderr)
-            except Exception as e:
-                self.logger.error(e)
+            for process in processes[output_path]:
+                try:
+                    stdout, stderr = process.communicate()
+                    self.logger.info(stdout)
+                    self.logger.error(stderr)
+                except Exception as e:
+                    self.logger.error(e)
 
     async def check_possibly_download(self):
         new_downloads = self.get_new_downloads()
-        self.logger.info(f"checked and found {len(new_downloads)} new downloads")
-        if len(new_downloads) > 0:
+        n_new_downloads = sum(len(d) for d in new_downloads.values())
+        self.logger.info(f"checked and found {n_new_downloads} new downloads")
+        if n_new_downloads > 0:
             await self.download(new_downloads)
 
 
