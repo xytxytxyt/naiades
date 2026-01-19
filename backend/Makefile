@@ -17,4 +17,4 @@ test:
 
 # remember to activate virtualenv
 run:
-	fastapi dev naiades/server.py --host 0.0.0.0 --port 8001
+	uvicorn naiades.server:app --reload --host 0.0.0.0 --port 8001 --reload-include '*.yaml'
